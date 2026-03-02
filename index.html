@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFL Data Tools - Login</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-container { background-color: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); text-align: center; width: 100%; max-width: 360px; }
+        h1 { color: #1c1e21; margin-bottom: 20px; font-size: 28px; }
+        .input-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; color: #606770; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 12px; border: 1px solid #dddfe2; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+        .login-btn { width: 100%; padding: 12px; border: none; border-radius: 8px; background-color: #1877f2; color: #fff; font-size: 18px; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+        .login-btn:hover { background-color: #166fe5; }
+        .error-message { color: #fa3e3e; margin-top: 15px; font-weight: 500; min-height: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <h1>AFL Data Tools Login</h1>
+        <form id="loginForm">
+            <div class="input-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" required>
+            </div>
+            <div class="input-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit" class="login-btn">Log In</button>
+            <p id="errorMessage" class="error-message"></p>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(event) {
+            event.preventDefault(); // Prevents the form from submitting the traditional way
+
+            const usernameInput = document.getElementById('username').value;
+            const passwordInput = document.getElementById('password').value;
+            const errorMessage = document.getElementById('errorMessage');
+            
+            try {
+                // Fetch the credentials from the external file
+                const response = await fetch('config/credentials.json');
+                if (!response.ok) {
+                    throw new Error('Could not load credentials file.');
+                }
+                const storedCredentials = await response.json();
+
+                // Check if the entered credentials match the stored ones
+                if (usernameInput === storedCredentials.username && passwordInput === storedCredentials.password) {
+                    // Successful login, redirect to the dashboard
+                    window.location.href = 'dashboard.html';
+                } else {
+                    // Failed login
+                    errorMessage.textContent = 'Invalid username or password.';
+                }
+            } catch (error) {
+                console.error('Login Error:', error);
+                errorMessage.textContent = 'An error occurred. Please try again later.';
+            }
+        });
+    </script>
+
+</body>
+</html>

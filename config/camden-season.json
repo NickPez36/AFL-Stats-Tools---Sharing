@@ -1,0 +1,22 @@
+{
+  "season": 2026,
+  "teamName": "Camden Cats",
+  "defaultOpponentName": "Opposition",
+  "defaultSeasonLabel": "2026 Season",
+  "defaultRoundLabelTemplate": "Round {round} vs {opponent}",
+  "exportFilenamePrefixes": {
+    "individualStats": "camden-cats-stats",
+    "teamStats": "camden-cats-team-stats",
+    "possessionTracker": "camden_cats_analytics"
+  },
+  "roster": {
+    "playerCount": 22,
+    "defaultPlayerNameTemplate": "Player {number}"
+  },
+  "timelineWindows": {
+    "teamStatsSeconds": 600,
+    "individualStatsSeconds": 900,
+    "possessionMaxSeconds": 2100
+  }
+}
+

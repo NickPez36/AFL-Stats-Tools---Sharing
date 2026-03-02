@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFL Team Analysis Tool v2.2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+        }
+        .stat-btn, .quarter-btn, .control-btn { transition: all 0.1s ease-in-out; }
+        .stat-btn:active, .control-btn:active { transform: scale(0.95); }
+        .quarter-btn.active { background-color: #16a34a; color: white; font-weight: 600; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.4); }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: white; padding: 2rem; border-radius: 0.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 90%; width: 500px; text-align: center; }
+        #videoDropZone, #timelineDropZone { border: 3px dashed #cbd5e1; transition: all 0.2s ease-in-out; }
+        #videoDropZone.dragging, #timelineDropZone.dragging { border-color: #3b82f6; background-color: #eff6ff; }
+        #timelineCanvas { cursor: crosshair; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 flex flex-col gap-4">
+        
+        <header class="text-center flex-shrink-0">
+            <h1 class="text-3xl font-bold text-gray-900">AFL Team Analysis Tool</h1>
+            <p id="teamSeasonSubtitle" class="text-sm text-gray-600 mt-1"></p>
+        </header>
+
+        <!-- Top Controls: Setup & Quarters -->
+        <div class="flex-shrink-0 bg-white p-4 rounded-lg shadow-md">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
+                <!-- Match Setup -->
+                <div class="md:col-span-2">
+                    <h2 class="text-lg font-semibold mb-2 text-gray-700">Match Setup</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <input type="text" id="matchTitle" placeholder="Match Title" class="w-full p-2 border border-gray-300 rounded-md sm:col-span-1">
+                        <input type="text" id="team1Name" value="Team 1" class="w-full p-2 border border-gray-300 rounded-md">
+                        <input type="text" id="team2Name" value="Team 2" class="w-full p-2 border border-gray-300 rounded-md">
+                    </div>
+                </div>
+                <!-- Quarter Selection -->
+                <div>
+                    <h2 class="text-lg font-semibold mb-2 text-gray-700">Actions</h2>
+                    <div class="grid grid-cols-2 gap-2">
+                         <div class="grid grid-cols-2 gap-2 col-span-2 sm:col-span-1">
+                            <button id="q1" onclick="setQuarter(1)" class="quarter-btn border border-gray-300 py-2 rounded-md text-sm">Q1</button>
+                            <button id="q2" onclick="setQuarter(2)" class="quarter-btn border border-gray-300 py-2 rounded-md text-sm">Q2</button>
+                            <button id="q3" onclick="setQuarter(3)" class="quarter-btn border border-gray-300 py-2 rounded-md text-sm">Q3</button>
+                            <button id="q4" onclick="setQuarter(4)" class="quarter-btn border border-gray-300 py-2 rounded-md text-sm">Q4</button>
+                        </div>
+                        <button onclick="recordEvent('Whistle')" class="control-btn bg-cyan-500 text-white font-bold py-2 rounded-lg col-span-2 sm:col-span-1">WHISTLE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Coding Interface -->
+        <div id="coding-interface" class="bg-white rounded-lg shadow-lg flex flex-col lg:flex-row gap-4 p-4">
+            <!-- Left Panel: Video & Bottom Buttons -->
+            <div class="flex-grow lg:w-3/5 flex flex-col gap-4">
+                <div id="videoDropZone" class="w-full aspect-video bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 text-xl font-semibold flex-shrink-0">
+                    <p id="dropZoneText">Drop Video File Here</p>
+                    <video id="videoPlayer" class="w-full h-full rounded-lg hidden" controls></video>
+                </div>
+                <!-- Bottom Buttons Panel -->
+                <div id="bottom-button-panel" class="bg-gray-50 p-4 rounded-lg border"></div>
+            </div>
+
+            <!-- Right Panel: Buttons -->
+            <div id="button-panel" class="lg:w-2/5 bg-gray-50 p-4 rounded-lg border">
+                <div id="statButtonGroups" class="space-y-4"></div>
+            </div>
+        </div>
+
+        <!-- Timeline & Actions -->
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+             <!-- Timeline Section -->
+            <div id="timelineDropZone" class="bg-white p-4 rounded-lg shadow-md xl:col-span-2">
+                <h2 class="text-xl font-semibold mb-2 flex-shrink-0">Timeline</h2>
+                <div class="relative h-96">
+                     <canvas id="timelineCanvas" class="absolute top-0 left-0 w-full h-full"></canvas>
+                </div>
+                <input type="range" id="timelineScrubber" class="w-full mt-2 flex-shrink-0" value="0" step="1">
+            </div>
+            <!-- Action Buttons -->
+            <div class="bg-white p-4 rounded-lg shadow-md xl:col-span-1 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold mb-2">Timeline Actions</h2>
+                    <button onclick="clearTimeline()" class="w-full control-btn bg-gray-500 text-white px-4 py-2 rounded-md mb-4">Clear All Instances</button>
+                </div>
+                <div>
+                    <h2 class="text-xl font-semibold mb-2">Export</h2>
+                    <button onclick="downloadXML()" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold">Generate & Download XML</button>
+                </div>
+                <div class="mt-6 border-t pt-4">
+                    <h2 class="text-lg font-semibold mb-2">Quarter Summary</h2>
+                    <p class="text-xs text-gray-500 mb-2">Shows counts by stat type for the selected quarter.</p>
+                    <div id="quarterSummary" class="text-sm text-gray-700">
+                        <p class="text-gray-500">Select a quarter and start coding to see tallies.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+    <!-- Modals -->
+    <div id="notificationModal" class="modal-overlay hidden"><div class="modal-content"><p id="modalMessage" class="text-lg"></p><button onclick="closeNotificationModal()" class="mt-4 bg-blue-500 text-white px-6 py-2 rounded-md">OK</button></div></div>
+    <div id="editModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 class="text-2xl font-semibold mb-6">Edit Instance</h3>
+             <div class="space-y-4 text-left">
+                <div>
+                    <label for="editStatSelect" class="block text-sm font-medium text-gray-700">Statistic</label>
+                    <select id="editStatSelect" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm"></select>
+                </div>
+                <div id="duration-controls">
+                    <label class="block text-sm font-medium text-gray-700">Adjust Duration</label>
+                    <div class="mt-1 grid grid-cols-4 gap-2">
+                        <button onclick="adjustInstanceTime(-5)" class="control-btn bg-gray-200 py-2 rounded-md">-5s</button>
+                        <button onclick="adjustInstanceTime(-1)" class="control-btn bg-gray-200 py-2 rounded-md">-1s</button>
+                        <button onclick="adjustInstanceTime(1)" class="control-btn bg-gray-200 py-2 rounded-md">+1s</button>
+                        <button onclick="adjustInstanceTime(5)" class="control-btn bg-gray-200 py-2 rounded-md">+5s</button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-8 flex justify-between items-center">
+                <button onclick="deleteInstance(eventToEditId, true)" class="bg-red-600 text-white px-6 py-2 rounded-md">Delete</button>
+                <div>
+                    <button onclick="closeEditModal()" class="bg-gray-300 text-gray-800 px-6 py-2 rounded-md mr-4">Cancel</button>
+                    <button onclick="saveEdit()" class="bg-blue-600 text-white px-6 py-2 rounded-md">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIG & STATE ---
+        const CAMDEN_CONFIG_PATH = '../config/camden-season.json';
+        const INSTANCE_DURATIONS = {
+            'Goal - Field Play': 29.3, 'Goal - Set Shot': 52.0, 'Behind - Field Play': 32.0, 'Behind - Set Shot': 52.0,
+            'Oppo Goal - Field Play': 29.0, 'Oppo Goal - Set Shot': 52.0, 'Oppo Behind - Field Play': 32.0, 'Oppo Behind - Set Shot': 52.0,
+            'Inside 50': 30.0, 'Inside 50 (Drop Zone)': 27.0, 'Inside 50 (Rebound Zone)': 27.0, 'Fast Rebound 50': 27.0,
+            'Kick out - Slow': 34.0, 'Oppo Kick out - Fast': 29.0, 'Oppo Kick out - Slow': 29.0, 'Oppo Fast Defensive Exit': 29.0,
+            'Oppo Slow Defensive Exit': 32.0, 'Slow Defensive Exit': 32.0, 'Oppo Forward 50 Entry (Fast)': 30.0, 'Oppo Forward 50 Entry (Slow)': 32.0,
+            'Centre Stoppage Win': 25.0, 'Centre Stoppage Loss': 25.0, 'Centre Stoppage Neutral': 25.0, 'Between Arcs Stoppage Win': 25.0,
+            'Between Arcs Stoppage Loss': 25.0, 'Between Arcs Stoppage Neutral': 25.0, 'Defensive 50 Stoppage Win': 25.0,
+            'Defensive 50 Stoppage Loss': 25.0, 'Defensive 50 Stoppage Neutral': 25.0, 'Forward 50 Stoppage Win': 25.0,
+            'Forward 50 Stoppage Loss': 25.0, 'Forward 50 Stoppage Neutral': 25.0, 'Defensive 50 Mark': 27.0,
+            'Inside 50 Mark - Contested': 27.0, 'Inside 50 Mark - Uncontested': 27.0, 'Oppo Defensive 50 Mark': 27.0, 'Oppo Forward 50 Mark': 27.0,
+            'Direct Turnover - Between Arcs': 30.0, 'Direct Turnover - D50': 30.0, 'Direct Turnover - F50': 30.0,
+            'Chase Down Tackle': 23.0, 'Fast Through The Middle': 33.0, 'Forward HB': 23.0, 'Handball Recieve': 23.0,
+            'Inside 45 kick': 23.0, 'Switch and Release': 31.0, 'Switch and Slow': 34.0, 'Kick out - Fast': 29.0, 'Whistle': 4.0
+        };
+
+        const STAT_GROUPS = [
+            { name: "Entries & Zones", color: "#3b82f6", stats: ['Inside 50 (Drop Zone)', 'Inside 50 (Rebound Zone)', 'Oppo Forward 50 Entry (Fast)', 'Oppo Forward 50 Entry (Slow)'] },
+            { name: "Exits & Rebounds", color: "#f97316", stats: ['Fast Rebound 50', 'Slow Defensive Exit', 'Oppo Fast Defensive Exit', 'Oppo Slow Defensive Exit', 'Kick out - Fast', 'Kick out - Slow', 'Oppo Kick out - Fast', 'Oppo Kick out - Slow'] },
+            { name: "Scoring", color: "#16a34a", stats: ['Goal - Field Play', 'Goal - Set Shot', 'Behind - Field Play', 'Behind - Set Shot', 'Oppo Goal - Field Play', 'Oppo Goal - Set Shot', 'Oppo Behind - Field Play', 'Oppo Behind - Set Shot'] },
+            { name: "Stoppages", color: "#eab308", stats: ['Centre Stoppage Win', 'Centre Stoppage Loss', 'Centre Stoppage Neutral', 'Between Arcs Stoppage Win', 'Between Arcs Stoppage Loss', 'Between Arcs Stoppage Neutral', 'Defensive 50 Stoppage Win', 'Defensive 50 Stoppage Loss', 'Defensive 50 Stoppage Neutral', 'Forward 50 Stoppage Win', 'Forward 50 Stoppage Loss', 'Forward 50 Stoppage Neutral'] },
+            { name: "Marks", color: "#8b5cf6", stats: ['Defensive 50 Mark', 'Inside 50 Mark - Contested', 'Inside 50 Mark - Uncontested', 'Oppo Defensive 50 Mark', 'Oppo Forward 50 Mark'] },
+            { name: "Turnovers", color: "#4b5563", stats: ['Direct Turnover - Between Arcs', 'Direct Turnover - D50', 'Direct Turnover - F50'] },
+            { name: "General Play", color: "#14b8a6", stats: ['Chase Down Tackle', 'Fast Through The Middle', 'Forward HB', 'Handball Recieve', 'Inside 45 kick', 'Switch and Release', 'Switch and Slow'] },
+        ];
+
+        let camdenConfig = null;
+        let TIMELINE_WINDOW_SECONDS = 600; // default, can be overridden by config
+        let matchData = { title: '', team1Name: 'Team 1', team2Name: 'Team 2', allEvents: [] };
+        const eventStore = {
+            add(event) {
+                matchData.allEvents.push(event);
+            },
+            update(eventId, updater) {
+                const index = matchData.allEvents.findIndex(e => e.id === eventId);
+                if (index === -1) return;
+                const event = matchData.allEvents[index];
+                updater(event);
+            },
+            remove(eventId) {
+                matchData.allEvents = matchData.allEvents.filter(e => e.id !== eventId);
+            },
+            clear() {
+                matchData.allEvents = [];
+            },
+            replaceAll(events) {
+                matchData.allEvents = events;
+            }
+        };
+        let currentQuarter = null;
+        let eventToEditId = null;
+        let isCanvasScrubbing = false;
+        let rowMap = new Map();
+        const ROW_HEIGHT = 20;
+        const ROW_GAP = 5;
+        const TIMELINE_WINDOW_SECONDS = 600; // 10 minutes view
+        let timelineWindowStartSeconds = 0;
+
+        // --- DOM ELEMENTS ---
+        const videoDropZone = document.getElementById('videoDropZone');
+        const timelineDropZone = document.getElementById('timelineDropZone');
+        const dropZoneText = document.getElementById('dropZoneText');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const timelineCanvas = document.getElementById('timelineCanvas');
+        const timelineScrubber = document.getElementById('timelineScrubber');
+        const ctx = timelineCanvas.getContext('2d');
+        const statButtonGroupsContainer = document.getElementById('statButtonGroups');
+        const bottomButtonPanel = document.getElementById('bottom-button-panel');
+        const notificationModal = document.getElementById('notificationModal');
+        const editModal = document.getElementById('editModal');
+        const modalMessage = document.getElementById('modalMessage');
+        const editStatSelect = document.getElementById('editStatSelect');
+        const teamSeasonSubtitle = document.getElementById('teamSeasonSubtitle');
+        const quarterSummary = document.getElementById('quarterSummary');
+
+        // --- CONFIG LOADING ---
+        async function loadCamdenConfig() {
+            try {
+                const response = await fetch(CAMDEN_CONFIG_PATH);
+                if (!response.ok) throw new Error('Failed to load Camden season config');
+                camdenConfig = await response.json();
+                TIMELINE_WINDOW_SECONDS = camdenConfig?.timelineWindows?.teamStatsSeconds ?? TIMELINE_WINDOW_SECONDS;
+                if (teamSeasonSubtitle && camdenConfig?.defaultSeasonLabel) {
+                    teamSeasonSubtitle.textContent = `${camdenConfig.defaultSeasonLabel} – Configure team names and code events by quarter.`;
+                }
+            } catch (err) {
+                console.warn('Using default settings – Camden config not available:', err);
+                camdenConfig = null;
+            }
+        }
+
+        // --- INITIALIZATION ---
+        function initializeApp() {
+            renderStatButtons();
+            setupDragAndDrop();
+            setupCanvasEvents();
+            setupScrubberEvents();
+            setupHotkeys();
+            
+            videoPlayer.addEventListener('timeupdate', drawTimeline);
+            videoPlayer.addEventListener('loadedmetadata', () => {
+                timelineScrubber.max = Math.max(0, videoPlayer.duration - TIMELINE_WINDOW_SECONDS);
+                resizeCanvas();
+            });
+            window.addEventListener('resize', resizeCanvas);
+        }
+        
+        function renderStatButtons() {
+            statButtonGroupsContainer.innerHTML = '';
+            bottomButtonPanel.innerHTML = '';
+            STAT_GROUPS.forEach(group => {
+                const targetPanel = (group.name === "Turnovers" || group.name === "General Play") ? bottomButtonPanel : statButtonGroupsContainer;
+
+                const groupDiv = document.createElement('div');
+                groupDiv.className = "mb-4";
+                const title = document.createElement('h3');
+                title.className = 'text-md font-semibold mb-2 text-gray-700';
+                title.textContent = group.name;
+                groupDiv.appendChild(title);
+                
+                const flexDiv = document.createElement('div');
+                flexDiv.className = 'flex flex-wrap gap-2';
+                
+                group.stats.forEach(stat => {
+                    const btn = document.createElement('button');
+                    btn.textContent = stat;
+                    btn.onclick = () => recordEvent(stat);
+                    btn.className = `stat-btn text-white px-3 py-2 text-xs rounded-md shadow-sm font-semibold`;
+                    btn.style.backgroundColor = group.color;
+                    flexDiv.appendChild(btn);
+                });
+                groupDiv.appendChild(flexDiv);
+                targetPanel.appendChild(groupDiv);
+            });
+        }
+
+        // --- HOTKEYS ---
+        function setupHotkeys() {
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+                switch (e.key) {
+                    case ' ': e.preventDefault(); (videoPlayer.paused) ? videoPlayer.play() : videoPlayer.pause(); break;
+                    case 'ArrowLeft': e.preventDefault(); videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - 1); break;
+                    case 'ArrowRight': e.preventDefault(); if (videoPlayer.duration) videoPlayer.currentTime = Math.min(videoPlayer.duration, videoPlayer.currentTime + 1); break;
+                }
+            });
+        }
+
+        // --- FILE HANDLING ---
+        function setupDragAndDrop() {
+            videoDropZone.addEventListener('dragover', (e) => { e.preventDefault(); videoDropZone.classList.add('dragging'); });
+            videoDropZone.addEventListener('dragleave', () => { videoDropZone.classList.remove('dragging'); });
+            videoDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                videoDropZone.classList.remove('dragging');
+                const file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith('video/')) {
+                    videoPlayer.src = URL.createObjectURL(file);
+                    videoPlayer.classList.remove('hidden');
+                    dropZoneText.classList.add('hidden');
+                } else { showNotification('Please drop a valid VIDEO file.'); }
+            });
+            timelineDropZone.addEventListener('dragover', (e) => { e.preventDefault(); timelineDropZone.classList.add('dragging'); });
+            timelineDropZone.addEventListener('dragleave', () => { timelineDropZone.classList.remove('dragging'); });
+            timelineDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                timelineDropZone.classList.remove('dragging');
+                const file = e.dataTransfer.files[0];
+                if (file && (file.type === 'text/xml' || file.name.endsWith('.xml'))) {
+                    loadXML(file);
+                } else { showNotification('Please drop a valid XML file.'); }
+            });
+        }
+
+        // --- CORE APP LOGIC ---
+        function setQuarter(quarter) {
+            currentQuarter = quarter;
+            document.querySelectorAll('.quarter-btn').forEach((btn, i) => btn.classList.toggle('active', (i + 1) === quarter));
+            updateQuarterSummary();
+        }
+
+        function recordEvent(type) {
+            if (!videoPlayer.src) { showNotification('Please load a video first.'); return; }
+            if (!currentQuarter) { showNotification('Please select a quarter.'); return; }
+            
+            const recordedTime = videoPlayer.currentTime;
+            const duration = INSTANCE_DURATIONS[type] || 25.0;
+            const preRoll = duration * 0.67;
+            const postRoll = duration * 0.33;
+
+            const newEvent = {
+                id: crypto.randomUUID(), type, quarter: currentQuarter,
+                startTimeSeconds: Math.max(0, recordedTime - preRoll),
+                endTimeSeconds: recordedTime + postRoll,
+            };
+            eventStore.add(newEvent);
+
+            if (type === 'Inside 50 (Drop Zone)' || type === 'Inside 50 (Rebound Zone)') {
+                 const i50Duration = INSTANCE_DURATIONS['Inside 50'] || 30.0;
+                 eventStore.add({
+                    id: crypto.randomUUID(), type: 'Inside 50', quarter: currentQuarter,
+                    startTimeSeconds: Math.max(0, recordedTime - (i50Duration * 0.67)),
+                    endTimeSeconds: recordedTime + (i50Duration * 0.33),
+                });
+            }
+            drawTimeline();
+            updateQuarterSummary();
+        }
+
+        // --- CANVAS & TIMELINE ---
+        function resizeCanvas() {
+            const container = timelineCanvas.parentElement;
+            if(container) {
+                timelineCanvas.width = container.clientWidth;
+                timelineCanvas.height = container.clientHeight;
+                drawTimeline();
+            }
+        }
+        
+        function drawTimeline() {
+            if (!videoPlayer.duration || !timelineCanvas.parentElement) return;
+            
+            const W = timelineCanvas.width;
+            const H = timelineCanvas.height;
+            ctx.clearRect(0, 0, W, H);
+
+            rowMap.clear();
+            let rowIndex = 0;
+            rowMap.set('Whistle', rowIndex++);
+            STAT_GROUPS.forEach(group => rowMap.set(group.name, rowIndex++));
+            
+            const dynamicRowHeight = Math.min(ROW_HEIGHT, (H - (rowIndex * ROW_GAP)) / rowIndex);
+            const labelAreaWidth = 120;
+
+            ctx.font = '11px Inter';
+            ctx.fillStyle = '#6b7280';
+            for (const [key, index] of rowMap.entries()) {
+                const y = index * (dynamicRowHeight + ROW_GAP) + dynamicRowHeight / 2;
+                ctx.fillText(key, 5, y + 4);
+                ctx.strokeStyle = '#e5e7eb';
+                ctx.beginPath();
+                ctx.moveTo(labelAreaWidth, y - dynamicRowHeight/2 + 0.5);
+                ctx.lineTo(W, y - dynamicRowHeight/2 + 0.5);
+                ctx.stroke();
+            }
+
+            matchData.allEvents.forEach(event => {
+                if (event.endTimeSeconds < timelineWindowStartSeconds || event.startTimeSeconds > timelineWindowStartSeconds + TIMELINE_WINDOW_SECONDS) return;
+                
+                const group = STAT_GROUPS.find(g => g.stats.includes(event.type));
+                const groupName = event.type === 'Whistle' ? 'Whistle' : group?.name;
+                const rowIndex = rowMap.get(groupName);
+                if (rowIndex === undefined) return;
+
+                const y = rowIndex * (dynamicRowHeight + ROW_GAP);
+                const x = labelAreaWidth + ((event.startTimeSeconds - timelineWindowStartSeconds) / TIMELINE_WINDOW_SECONDS) * (W - labelAreaWidth);
+                const w = ((event.endTimeSeconds - event.startTimeSeconds) / TIMELINE_WINDOW_SECONDS) * (W - labelAreaWidth);
+                
+                ctx.fillStyle = event.type === 'Whistle' ? '#06b6d4' : group?.color || '#9ca3af';
+                ctx.fillRect(x, y, Math.max(2, w), dynamicRowHeight);
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 9px Inter';
+                ctx.textAlign = 'left';
+                if (w > 30) {
+                    ctx.fillText(event.type, x + 4, y + dynamicRowHeight / 2 + 3);
+                }
+            });
+
+            const playheadX = labelAreaWidth + ((videoPlayer.currentTime - timelineWindowStartSeconds) / TIMELINE_WINDOW_SECONDS) * (W - labelAreaWidth);
+            if (playheadX >= labelAreaWidth && playheadX <= W) {
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(playheadX, 0);
+                ctx.lineTo(playheadX, H);
+                ctx.stroke();
+                ctx.lineWidth = 1;
+            }
+        }
+
+        function setupCanvasEvents() {
+            const labelAreaWidth = 120;
+            timelineCanvas.addEventListener('mousedown', e => {
+                const rect = timelineCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                if (x < labelAreaWidth) return;
+                isCanvasScrubbing = true;
+                scrubVideo(x);
+            });
+            document.addEventListener('mousemove', e => {
+                if (!isCanvasScrubbing) return;
+                const rect = timelineCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                scrubVideo(x);
+            });
+            document.addEventListener('mouseup', () => { isCanvasScrubbing = false; });
+            timelineCanvas.addEventListener('click', e => {
+                if (isCanvasScrubbing) return;
+                const rect = timelineCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const clickedEvent = findEventAt(x, y);
+                if (clickedEvent) {
+                    openEditModal(clickedEvent.id);
+                }
+            });
+        }
+
+        function scrubVideo(mouseX) {
+            if (!videoPlayer.duration) return;
+            const W = timelineCanvas.width;
+            const labelAreaWidth = 120;
+            const timelineX = Math.max(labelAreaWidth, Math.min(W, mouseX));
+            const timeRatio = (timelineX - labelAreaWidth) / (W - labelAreaWidth);
+            videoPlayer.currentTime = timelineWindowStartSeconds + (timeRatio * TIMELINE_WINDOW_SECONDS);
+        }
+
+        function setupScrubberEvents() {
+            timelineScrubber.addEventListener('input', () => {
+                timelineWindowStartSeconds = parseFloat(timelineScrubber.value);
+                drawTimeline();
+            });
+        }
+        
+        function findEventAt(mouseX, mouseY) {
+            if (!videoPlayer.duration) return null;
+            const W = timelineCanvas.width;
+            const H = timelineCanvas.height;
+            const labelAreaWidth = 120;
+            const numRows = STAT_GROUPS.length + 1;
+            const dynamicRowHeight = Math.min(ROW_HEIGHT, (H - (numRows * ROW_GAP)) / numRows);
+
+            for (const event of [...matchData.allEvents].reverse()) {
+                const group = STAT_GROUPS.find(g => g.stats.includes(event.type));
+                const groupName = event.type === 'Whistle' ? 'Whistle' : group?.name;
+                const rowIndex = rowMap.get(groupName);
+                if (rowIndex === undefined) continue;
+                if (event.endTimeSeconds < timelineWindowStartSeconds || event.startTimeSeconds > timelineWindowStartSeconds + TIMELINE_WINDOW_SECONDS) continue;
+                
+                const y = rowIndex * (dynamicRowHeight + ROW_GAP);
+                const x = labelAreaWidth + ((event.startTimeSeconds - timelineWindowStartSeconds) / TIMELINE_WINDOW_SECONDS) * (W - labelAreaWidth);
+                const w = ((event.endTimeSeconds - event.startTimeSeconds) / TIMELINE_WINDOW_SECONDS) * (W - labelAreaWidth);
+                
+                if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + dynamicRowHeight) return event;
+            }
+            return null;
+        }
+
+        // --- EDITING & DELETION ---
+        function deleteInstance(eventId, fromModal = false) {
+            eventStore.remove(eventId);
+            if(fromModal) closeEditModal();
+            drawTimeline();
+            updateQuarterSummary();
+        }
+
+        function clearTimeline() { eventStore.clear(); drawTimeline(); updateQuarterSummary(); }
+
+        function openEditModal(eventId) {
+            const event = matchData.allEvents.find(e => e.id === eventId);
+            if (!event) return;
+            eventToEditId = eventId;
+            
+            const isWhistle = event.type === 'Whistle';
+            
+            // Populate dropdown
+            editStatSelect.innerHTML = '';
+            const allStats = Object.keys(INSTANCE_DURATIONS);
+            allStats.forEach(stat => {
+                if (stat === 'Inside 50') return; // Cannot manually select this one
+                const option = document.createElement('option');
+                option.value = stat;
+                option.textContent = stat;
+                if (stat === event.type) {
+                    option.selected = true;
+                }
+                editStatSelect.appendChild(option);
+            });
+            
+            editStatSelect.disabled = isWhistle;
+            document.getElementById('duration-controls').style.display = isWhistle ? 'none' : 'block';
+
+            editModal.classList.remove('hidden');
+        }
+
+        function adjustInstanceTime(seconds) {
+            const event = matchData.allEvents.find(e => e.id === eventToEditId);
+            if (!event) return;
+
+            const newEndTime = event.endTimeSeconds + seconds;
+            // Ensure instance is at least 1 second long
+            if (newEndTime > event.startTimeSeconds + 1) {
+                event.endTimeSeconds = newEndTime;
+            } else {
+                event.endTimeSeconds = event.startTimeSeconds + 1;
+            }
+            drawTimeline();
+        }
+
+        function closeEditModal() { editModal.classList.add('hidden'); eventToEditId = null; }
+
+        function saveEdit() {
+            const newType = editStatSelect.value;
+            eventStore.update(eventToEditId, (event) => {
+                if (!event) return;
+                event.type = newType;
+            });
+
+            closeEditModal();
+            drawTimeline();
+            updateQuarterSummary();
+        }
+
+        // --- XML IMPORT/EXPORT ---
+        function loadXML(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(e.target.result, "application/xml");
+                    
+                    const instances = xmlDoc.getElementsByTagName('instance');
+                    if (instances.length === 0) { showNotification('No instances found in XML.'); return; }
+                    
+                    const loadedEvents = [];
+                    let tempTeam1 = "Team 1";
+                    let tempTeam2 = "Team 2";
+
+                    for (const instance of instances) {
+                        const start = parseFloat(instance.getElementsByTagName('start')[0].textContent);
+                        const end = parseFloat(instance.getElementsByTagName('end')[0].textContent);
+                        const code = instance.getElementsByTagName('code')[0].textContent;
+                        let quarter = 0;
+                        const labels = instance.getElementsByTagName('label');
+                        for(const label of labels) {
+                            const textContent = label.getElementsByTagName('text')[0]?.textContent;
+                            if (textContent?.includes('Quarter')) quarter = parseInt(textContent.replace('Quarter ', ''));
+                            if (label.getElementsByTagName('group')[0]?.textContent === 'Team 1') tempTeam1 = textContent;
+                            if (label.getElementsByTagName('group')[0]?.textContent === 'Team 2') tempTeam2 = textContent;
+                        }
+                        loadedEvents.push({ id: crypto.randomUUID(), type: code, quarter, startTimeSeconds: start, endTimeSeconds: end });
+                    }
+                    document.getElementById('team1Name').value = tempTeam1;
+                    document.getElementById('team2Name').value = tempTeam2;
+                    eventStore.replaceAll(loadedEvents);
+                    drawTimeline();
+                    updateQuarterSummary();
+                    showNotification(`Successfully loaded ${matchData.allEvents.length} instances.`);
+                } catch (err) { showNotification('Error parsing XML file.'); console.error("XML Parsing Error:", err); }
+            };
+            reader.readAsText(file);
+        }
+
+        function generateXML() {
+            matchData.title = document.getElementById('matchTitle').value || 'Untitled Match';
+            matchData.team1Name = document.getElementById('team1Name').value || 'Team 1';
+            matchData.team2Name = document.getElementById('team2Name').value || 'Team 2';
+            
+            let instanceId = 1;
+            let allInstancesXml = '';
+            const uniqueCodes = new Set();
+            
+            const sortedEvents = [...matchData.allEvents].sort((a, b) => a.startTimeSeconds - b.startTimeSeconds);
+            sortedEvents.forEach(event => {
+                const code = event.type;
+                uniqueCodes.add(code);
+                
+                let teamLabels = '';
+                if (event.type === 'Whistle') {
+                    teamLabels = `    <label><group>Team 1</group><text>${escapeXml(matchData.team1Name)}</text></label>\n` +
+                                 `    <label><group>Team 2</group><text>${escapeXml(matchData.team2Name)}</text></label>\n`;
+                }
+
+                allInstancesXml += `  <instance>\n` +
+                                   `    <ID>${instanceId++}</ID>\n` +
+                                   `    <start>${event.startTimeSeconds}</start>\n` +
+                                   `    <end>${event.endTimeSeconds}</end>\n` +
+                                   `    <code>${escapeXml(code)}</code>\n` +
+                                   teamLabels +
+                                   `    <label><text>Quarter ${event.quarter}</text></label>\n` +
+                                   `  </instance>\n`;
+            });
+            let rowsXml = '';
+            uniqueCodes.forEach(code => { rowsXml += `  <row><code>${escapeXml(code)}</code></row>\n`; });
+            
+            return `<?xml version="1.0" encoding="UTF-8"?>\n<file>\n<ALL_INSTANCES>\n${allInstancesXml}</ALL_INSTANCES>\n<ROWS>\n${rowsXml}</ROWS>\n</file>`;
+        }
+
+        function downloadXML() {
+            const xmlString = generateXML();
+            const blob = new Blob([xmlString], { type: 'text/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const defaultPrefix = camdenConfig?.exportFilenamePrefixes?.teamStats || 'afl-team-stats';
+            const titleInput = document.getElementById('matchTitle').value;
+            const safeTitleBase = (titleInput || defaultPrefix).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            a.download = `${safeTitleBase}.xml`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // --- HELPERS ---
+        function showNotification(message) { modalMessage.textContent = message; notificationModal.classList.remove('hidden'); }
+        function closeNotificationModal() { notificationModal.classList.add('hidden'); }
+        function escapeXml(unsafe) { 
+            if (typeof unsafe !== 'string') return '';
+            return unsafe.replace(/[<>&'"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','\'':'&apos;','"':'&quot;'}[c]));
+        }
+
+        // --- QUARTER SUMMARY ---
+        function updateQuarterSummary() {
+            if (!quarterSummary) return;
+            if (!currentQuarter) {
+                quarterSummary.innerHTML = '<p class="text-gray-500">Select a quarter to see tallies.</p>';
+                return;
+            }
+
+            const counts = {};
+            Object.keys(INSTANCE_DURATIONS).forEach(stat => { counts[stat] = 0; });
+
+            matchData.allEvents.forEach(event => {
+                if (!event.type || event.type === 'Whistle') return;
+                if (event.quarter !== currentQuarter) return;
+                if (counts[event.type] === undefined) counts[event.type] = 0;
+                counts[event.type] += 1;
+            });
+
+            const rows = Object.keys(counts).sort().map(stat => {
+                const value = counts[stat] ?? 0;
+                if (value === 0) return '';
+                return `<tr><td class="py-0.5 pr-4 text-gray-600">${stat}</td><td class="py-0.5 font-semibold text-gray-900 text-right">${value}</td></tr>`;
+            }).join('');
+
+            if (!rows) {
+                quarterSummary.innerHTML = '<p class="text-gray-500">No stats coded yet for this quarter.</p>';
+                return;
+            }
+
+            quarterSummary.innerHTML = `
+                <table class="w-full text-sm">
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadCamdenConfig();
+            initializeApp();
+        });
+    </script>
+</body>
+</html>
